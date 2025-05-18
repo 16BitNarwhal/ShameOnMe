@@ -4,6 +4,7 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import Anthropic from '@anthropic-ai/sdk';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import Sound from './sound';
 
 const Page = () => {
   const webcamRef = useRef(null);
@@ -14,6 +15,7 @@ const Page = () => {
   const [error, setError] = useState(null);
   const [useQdrant, setUseQdrant] = useState(false);
   const [anthropicClient, setAnthropicClient] = useState(null);
+  const [testSound, setTestSound] = useState('');
 
   // Log descriptions whenever they change
   useEffect(() => {
@@ -177,6 +179,16 @@ const Page = () => {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-8 text-center">Real-time Image Analyzer</h1>
         
+        <div className="mb-8 flex justify-center">
+          <button
+            onClick={() => setTestSound('hello world')}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Test Sound
+          </button>
+          {testSound && <Sound text={testSound} />}
+        </div>
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <strong>Error:</strong> {error}
@@ -202,7 +214,10 @@ const Page = () => {
                 {isLoading ? (
                   <p className="text-gray-600">Analyzing image...</p>
                 ) : (
-                  <p className="text-gray-700">{description || 'Waiting for analysis...'}</p>
+                  <>
+                    <p className="text-gray-700">{description || 'Waiting for analysis...'}</p>
+                    {description && <Sound text={description} />}
+                  </>
                 )}
               </div>
             </div>
@@ -215,6 +230,7 @@ const Page = () => {
                     <div key={index} className="border-b pb-2">
                       <p className="text-sm text-gray-500">{new Date(item.timestamp).toLocaleString()}</p>
                       <p className="text-gray-700">{item.description}</p>
+                      <Sound text={item.description} />
                     </div>
                   ))}
                 </div>
