@@ -3,8 +3,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import Anthropic from '@anthropic-ai/sdk';
-import { QdrantClient } from '@qdrant/js-client-rest';
-
+import Sound from './sound';
 const Page = () => {
   const webcamRef = useRef(null);
   const [imgSrc, setImgSrc] = useState(null);
@@ -13,11 +12,9 @@ const Page = () => {
   const [descriptions, setDescriptions] = useState([]);
   const [error, setError] = useState(null);
   const [anthropicClient, setAnthropicClient] = useState(null);
-
-  // Log descriptions whenever they change
-  useEffect(() => {
-    console.log('Current descriptions:', descriptions);
-  }, [descriptions]);
+  const [keywordFound, setKeywordFound] = useState(false);
+  const [testSound, setTestSound] = useState(null);
+  const [audio, setAudio] = useState(null);
 
   // Initialize Anthropic client
   useEffect(() => {
@@ -37,6 +34,55 @@ const Page = () => {
     
     setAnthropicClient(client);
   }, []);
+
+  const playElevenLabsAudio = async () => {
+    try {
+      console.log('Attempting to play ElevenLabs audio...');
+      console.log('API Key available:', !!process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY);
+      
+      const response = await fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY
+        },
+        body: JSON.stringify({
+          text: "Opening the fridge again you fatty?",
+          model_id: "eleven_monolingual_v1",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.5
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ElevenLabs API error:', response.status, errorText);
+        throw new Error(`Failed to generate audio: ${response.status} ${errorText}`);
+      }
+      
+      console.log('Audio response received, creating blob...');
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      console.log('Audio URL created:', audioUrl);
+      
+      const newAudio = new Audio(audioUrl);
+      console.log('Audio element created, attempting to play...');
+      
+      // Add event listeners for debugging
+      newAudio.addEventListener('playing', () => console.log('Audio started playing'));
+      newAudio.addEventListener('error', (e) => console.error('Audio playback error:', e));
+      newAudio.addEventListener('ended', () => console.log('Audio playback ended'));
+      
+      setAudio(newAudio);
+      await newAudio.play();
+      console.log('Audio play() called successfully');
+    } catch (error) {
+      console.error('Error in playElevenLabsAudio:', error);
+    }
+  };
 
   const analyzeImage = async (imageData) => {
     if (!imageData || !anthropicClient) {
@@ -90,24 +136,15 @@ const Page = () => {
       console.log('Adding new description:', newDescriptionObj);
       setDescriptions(prev => [...prev, newDescriptionObj]);
 
-      // Check for fridge-related keywords
-      const fridgeKeywords = [
-        'fridge',
-        'refrigerator',
-        'refrigerator door',
-        'fridge door',
-        'freezer',
-        'icebox',
-        'cooler',
-        'chiller',
-        'cold storage',
-        'appliance'
-      ];
+      // Check for waterbottle keyword
+      const hasWaterBottle = newDescription.toLowerCase().includes('waterbottle');
       
-      const hasFridge = fridgeKeywords.some(keyword => 
-        newDescription.toLowerCase().includes(keyword.toLowerCase())
-      );
-      setKeywordFound(hasFridge);
+      if (hasWaterBottle) {
+        setKeywordFound(true);
+        await playElevenLabsAudio();
+      } else {
+        setKeywordFound(false);
+      }
 
     } catch (error) {
       console.error('Error analyzing image:', error);
@@ -144,16 +181,6 @@ const Page = () => {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-8 text-center">Real-time Image Analyzer</h1>
         
-        <div className="mb-8 flex justify-center">
-          <button
-            onClick={() => setTestSound('hello world')}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Test Sound
-          </button>
-          {testSound && <Sound text={testSound} />}
-        </div>
-
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <strong>Error:</strong> {error}
@@ -162,7 +189,7 @@ const Page = () => {
 
         {keywordFound && (
           <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4 text-center text-xl font-bold">
-            KEY WORD FOUND: Refrigerator Detected!
+            KEY WORD FOUND: Water Bottle Detected!
           </div>
         )}
         
