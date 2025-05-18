@@ -3,7 +3,6 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import Anthropic from '@anthropic-ai/sdk';
-import { QdrantClient } from '@qdrant/js-client-rest';
 
 const Page = () => {
   const webcamRef = useRef(null);
@@ -12,18 +11,13 @@ const Page = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [descriptions, setDescriptions] = useState([]);
   const [error, setError] = useState(null);
-  const [useQdrant, setUseQdrant] = useState(false);
   const [anthropicClient, setAnthropicClient] = useState(null);
-
-  // Log descriptions whenever they change
-  useEffect(() => {
-    console.log('Current descriptions:', descriptions);
-  }, [descriptions]);
+  const [keywordFound, setKeywordFound] = useState(false);
 
   // Initialize Anthropic client
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY;
-    console.log('API Key available:', !!apiKey); // This will log true/false without exposing the key
+    console.log('API Key available:', !!apiKey);
 
     if (!apiKey) {
       console.error('Anthropic API key is not set in environment variables');
@@ -31,7 +25,6 @@ const Page = () => {
       return;
     }
 
-    // Create Anthropic client
     const client = new Anthropic({
       apiKey: apiKey,
       dangerouslyAllowBrowser: true
@@ -39,33 +32,6 @@ const Page = () => {
     
     setAnthropicClient(client);
   }, []);
-
-  // Initialize Qdrant client only if needed
-  const qdrantClient = useQdrant ? new QdrantClient({ 
-    url: process.env.NEXT_PUBLIC_QDRANT_URL || 'http://localhost:6333',
-    checkCompatibility: false 
-  }) : null;
-
-  // Initialize Qdrant collection only if using Qdrant
-  useEffect(() => {
-    if (!useQdrant || !qdrantClient) return;
-
-    const initQdrant = async () => {
-      try {
-        await qdrantClient.createCollection('image_descriptions', {
-          vectors: {
-            size: 1536,
-            distance: 'Cosine',
-          },
-        });
-        console.log('Qdrant collection initialized successfully');
-      } catch (error) {
-        console.log('Qdrant initialization error:', error);
-        setUseQdrant(false);
-      }
-    };
-    initQdrant();
-  }, [useQdrant, qdrantClient]);
 
   const analyzeImage = async (imageData) => {
     if (!imageData || !anthropicClient) {
@@ -77,7 +43,6 @@ const Page = () => {
     setError(null);
 
     try {
-      // Extract base64 data without the data URL prefix
       const base64Data = imageData.split(',')[1];
       
       console.log('Sending image to Claude for analysis...');
@@ -90,7 +55,7 @@ const Page = () => {
             content: [
               {
                 type: "text",
-                text: "I am a witty, slightly sarcastic inner voice observing the user's actions through a camera feed. Using the provided image, describe what I see in a concise, first-person perspective (1-2 sentences). Focus on the key objects or actions in the scene and weave in a cheeky tone that reflects the user's habits, drawing on context from the MCP memory server (e.g., frequency of similar actions) to make it playful and relevant."
+                text: "I am a witty, slightly sarcastic inner voice observing the user's actions through a camera feed. Using the provided image, describe what I see in a concise, first-person perspective (1-2 sentences). Focus on the key objects or actions in the scene and weave in a cheeky tone that reflects the user's habits."
               },
               {
                 type: "image",
@@ -120,28 +85,25 @@ const Page = () => {
       console.log('Adding new description:', newDescriptionObj);
       setDescriptions(prev => [...prev, newDescriptionObj]);
 
-      // Try to store in Qdrant if available
-      if (useQdrant && qdrantClient) {
-        try {
-          await qdrantClient.upsert('image_descriptions', {
-            points: [
-              {
-                id: timestamp,
-                vector: new Array(1536).fill(0),
-                payload: {
-                  description: newDescription,
-                  timestamp: timestamp,
-                  image: imageData
-                }
-              }
-            ]
-          });
-          console.log('Successfully stored in Qdrant');
-        } catch (qdrantError) {
-          console.error('Error storing in Qdrant:', qdrantError);
-          setUseQdrant(false);
-        }
-      }
+      // Check for fridge-related keywords
+      const fridgeKeywords = [
+        'fridge',
+        'refrigerator',
+        'refrigerator door',
+        'fridge door',
+        'freezer',
+        'icebox',
+        'cooler',
+        'chiller',
+        'cold storage',
+        'appliance'
+      ];
+      
+      const hasFridge = fridgeKeywords.some(keyword => 
+        newDescription.toLowerCase().includes(keyword.toLowerCase())
+      );
+      setKeywordFound(hasFridge);
+
     } catch (error) {
       console.error('Error analyzing image:', error);
       setError(error.message || 'Error analyzing image. Please try again.');
@@ -153,7 +115,7 @@ const Page = () => {
 
   // Auto-capture every 2 seconds
   useEffect(() => {
-    if (!anthropicClient) return; // Don't start auto-capture until Anthropic is initialized
+    if (!anthropicClient) return;
     
     console.log('Starting auto-capture interval...');
     const interval = setInterval(() => {
@@ -170,7 +132,7 @@ const Page = () => {
       console.log('Cleaning up auto-capture interval...');
       clearInterval(interval);
     };
-  }, [anthropicClient]); // Re-run this effect when the Anthropic client changes
+  }, [anthropicClient]);
 
   return (
     <div className="min-h-screen p-8 bg-gray-100">
@@ -180,6 +142,12 @@ const Page = () => {
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <strong>Error:</strong> {error}
+          </div>
+        )}
+
+        {keywordFound && (
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4 text-center text-xl font-bold">
+            KEY WORD FOUND: Refrigerator Detected!
           </div>
         )}
         
